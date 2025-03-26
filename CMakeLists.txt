@@ -21,7 +21,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(lua)
 
-# Lua source files (corrected for lua/lua repo structure)
+# Lua source files
 set(LUA_SRC
     ${lua_SOURCE_DIR}/lapi.c
     ${lua_SOURCE_DIR}/lauxlib.c
@@ -63,7 +63,7 @@ add_library(lua STATIC ${LUA_SRC})
 target_include_directories(lua PUBLIC ${lua_SOURCE_DIR})
 target_compile_definitions(lua PRIVATE LUA_USE_C89)
 
-# macOS specific settings
+# macOS specific settings for Lua
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     target_compile_definitions(lua PRIVATE
         LUA_USE_MACOSX
@@ -81,7 +81,33 @@ set_target_properties(lua PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
-# Add plugin
+# Create an intermediate static library combining plugin code and Lua
+add_library(LuaParamaBangPluginCore STATIC
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+)
+target_include_directories(LuaParamaBangPluginCore
+    PRIVATE
+        Source
+        ${lua_SOURCE_DIR}
+        ${juce_SOURCE_DIR}/modules
+)
+target_link_libraries(LuaParamaBangPluginCore
+    PRIVATE
+        juce::juce_audio_utils
+        juce::juce_audio_devices  # Added for Standalone support
+    PUBLIC
+        $<$<PLATFORM_ID:Darwin>:-Wl,-force_load,$<TARGET_FILE:lua>>
+        $<$<NOT:$<PLATFORM_ID:Darwin>>:lua>
+)
+target_compile_definitions(LuaParamaBangPluginCore
+    PUBLIC
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
+)
+
+# Add plugin, linking to the combined core library
 juce_add_plugin(LuaParamaBangPlugin
     COMPANY_NAME "warblaydrInc"
     IS_SYNTH FALSE
@@ -96,51 +122,30 @@ juce_add_plugin(LuaParamaBangPlugin
     PRODUCT_NAME "LuaParamaBangPlugin"
 )
 
-# Source files
-target_sources(LuaParamaBangPlugin
-    PRIVATE
-        Source/PluginProcessor.cpp
-        Source/PluginEditor.cpp
-)
-
-# Include directories
+# Include directories for the plugin
 target_include_directories(LuaParamaBangPlugin
     PRIVATE
         Source
         ${lua_SOURCE_DIR}
+        ${juce_SOURCE_DIR}/modules
 )
 
-# Link libraries
+# Link the plugin to the core library and JUCE recommended flags
 target_link_libraries(LuaParamaBangPlugin
     PRIVATE
-        juce::juce_audio_utils
-        juce::juce_audio_processors
+        LuaParamaBangPluginCore
+        juce::juce_audio_utils    # Ensure available for Standalone
+        juce::juce_audio_devices  # Ensure available for Standalone
     PUBLIC
-        lua
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
 
-# On macOS, modify the shared code target's link command to force load lua
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    add_custom_command(TARGET LuaParamaBangPlugin POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Modifying link flags for LuaParamaBangPlugin_SharedCode"
-        COMMAND ${CMAKE_COMMAND} -E copy
-            ${CMAKE_BINARY_DIR}/CMakeFiles/LuaParamaBangPlugin_SharedCode.dir/link.txt
-            ${CMAKE_BINARY_DIR}/CMakeFiles/LuaParamaBangPlugin_SharedCode.dir/link.txt.bak
-        COMMAND sed -i '' 's|-lLuaParamaBangPlugin_SharedCode|-Wl,-force_load,${CMAKE_BINARY_DIR}/liblua.a|' ${CMAKE_BINARY_DIR}/CMakeFiles/LuaParamaBangPlugin_SharedCode.dir/link.txt
-        COMMENT "Forcing Lua symbols into LuaParamaBangPlugin_SharedCode"
-    )
-endif()
-
-# Compile definitions
+# Compile definitions for the plugin
 target_compile_definitions(LuaParamaBangPlugin
     PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
 )
-
-# Ensure JUCE modules are properly included
-target_include_directories(LuaParamaBangPlugin PRIVATE ${juce_SOURCE_DIR}/modules)
