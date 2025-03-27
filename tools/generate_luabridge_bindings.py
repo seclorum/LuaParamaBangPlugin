@@ -1,12 +1,19 @@
 # Note: edit JUCE Doxyfile to GENERATE_XML = YES
 
 import xml.etree.ElementTree as ET
+import sys
+import os
 
-# Path to the Doxygen XML output
-doxygen_xml_path = "path/to/doxygen/xml/index.xml"
+# Get the Doxygen XML path from the argument
+doxygen_xml_path = sys.argv[1]
+
+# Ensure the XML path exists
+if not os.path.isdir(doxygen_xml_path):
+    print(f"Error: Invalid Doxygen XML directory: {doxygen_xml_path}")
+    sys.exit(1)
 
 # Load the Doxygen XML
-tree = ET.parse(doxygen_xml_path)
+tree = ET.parse(os.path.join(doxygen_xml_path, "index.xml"))
 root = tree.getroot()
 
 # Iterate over the classes in the XML and generate LuaBridge bindings
@@ -33,9 +40,10 @@ def generate_luabridge_bindings():
             lua_bridge_code.append("        .endClass();\n")
 
     # Output the generated LuaBridge code
-    with open("generated_luabridge_bindings.cpp", "w") as f:
+    output_file = "generated_luabridge_bindings.cpp"
+    with open(output_file, "w") as f:
         f.write("\n".join(lua_bridge_code))
-    print("LuaBridge bindings generated!")
+    print(f"LuaBridge bindings generated and saved to {output_file}")
 
 # Generate the bindings
 generate_luabridge_bindings()
