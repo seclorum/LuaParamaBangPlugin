@@ -23,7 +23,9 @@ extern "C" {
 
 using namespace juce;
 
-class LuaPluginProcessor : public juce::AudioProcessor, public juce::AudioProcessorParameter::Listener, public juce::AudioProcessorValueTreeState::Listener
+class LuaPluginProcessor : public juce::AudioProcessor,
+                           public juce::AudioProcessorParameter::Listener,
+                           public juce::AudioProcessorValueTreeState::Listener
 {
 public:
     LuaPluginProcessor();
@@ -36,8 +38,6 @@ public:
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     void parameterChanged(const String& parameterID, float newValue) override;
-
-    // ✅ Corrected: Implement the required pure virtual methods
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
 
@@ -63,6 +63,7 @@ public:
 private:
     juce::AudioProcessorValueTreeState apvts;
     lua_State* L;
+    juce::CriticalSection luaLock; // Added for thread safety
 
     static int luaGetParam(lua_State* L);
     static int luaSetParam(lua_State* L);

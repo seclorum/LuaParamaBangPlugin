@@ -11,40 +11,49 @@ LuaPluginProcessor::LuaPluginProcessor()
           apvts(*this, nullptr, "PARAMETERS", {
                   std::make_unique<juce::AudioParameterInt>(ParameterID {"volume", PARAMETER_V1}, "Volume", 0, 127, 100),
                   std::make_unique<juce::AudioParameterInt>(ParameterID {"channel", PARAMETER_V1}, "Channel", 0, 127, 0)
-          })
+          }),
+          L(nullptr) // Initialize L to nullptr
 {
     L = luaL_newstate();
+    if (!L)
+    {
+        juce::Logger::writeToLog("Fatal: Failed to create Lua state");
+        return;
+    }
     luaL_openlibs(L);
 
-    lua_pushlightuserdata(L, this);
-    lua_setfield(L, LUA_REGISTRYINDEX, "LuaPluginProcessor");
-
-    lua_pushcfunction(L, luaGetParam);
-    lua_setglobal(L, "getParam");
-    lua_pushcfunction(L, luaSetParam);
-    lua_setglobal(L, "setParam");
-
-    if (luaL_dostring(L, R"(
-        function paramChanged(id, value)
-            print("Parameter changed: " .. id .. " = " .. value)
-        end
-
-        function processBlockEnter(numSamples)
-            local vol = getParam("volume") / 127
-            print("Processing block with volume: " .. vol)
-        end
-
-        function processBlockExit(numSamples)
-            -- Cleanup if needed
-        end
-    )") != LUA_OK)
     {
-        juce::Logger::writeToLog("Lua init error: " + String(lua_tostring(L, -1)));
-        lua_pop(L, 1);
-    }
-    else
-    {
-        juce::Logger::writeToLog("Lua script loaded successfully");
+        juce::ScopedLock lock(luaLock); // Protect Lua initialization
+        lua_pushlightuserdata(L, this);
+        lua_setfield(L, LUA_REGISTRYINDEX, "LuaPluginProcessor");
+
+        lua_pushcfunction(L, luaGetParam);
+        lua_setglobal(L, "getParam");
+        lua_pushcfunction(L, luaSetParam);
+        lua_setglobal(L, "setParam");
+
+        if (luaL_dostring(L, R"(
+            function paramChanged(id, value)
+                print("Parameter changed: " .. id .. " = " .. value)
+            end
+
+            function processBlockEnter(numSamples)
+                local vol = getParam("volume") / 127
+                print("Processing block with volume: " .. vol)
+            end
+
+            function processBlockExit(numSamples)
+                -- Cleanup if needed
+            end
+        )") != LUA_OK)
+        {
+            juce::Logger::writeToLog("Lua init error: " + String(lua_tostring(L, -1)));
+            lua_pop(L, 1);
+        }
+        else
+        {
+            juce::Logger::writeToLog("Lua script loaded successfully");
+        }
     }
 
     apvts.addParameterListener("volume", this);
@@ -56,24 +65,25 @@ LuaPluginProcessor::~LuaPluginProcessor()
 {
     apvts.removeParameterListener("volume", this);
     apvts.removeParameterListener("channel", this);
-    lua_close(L);
+    if (L) lua_close(L);
 }
 
 void LuaPluginProcessor::parameterChanged(const String& parameterID, float newValue)
 {
     juce::Logger::writeToLog("parameterChanged called with ID: " + parameterID + ", value: " + String(newValue));
 
-    if (L)
+    if (!L) return; // Skip if Lua is invalid
     {
+        juce::ScopedLock lock(luaLock); // Protect Lua access
         lua_getglobal(L, "paramChanged");
         if (lua_isfunction(L, -1))
         {
             lua_pushstring(L, parameterID.toRawUTF8());
             lua_pushnumber(L, newValue);
-
             if (lua_pcall(L, 2, 0, 0) != LUA_OK)
             {
-                juce::Logger::writeToLog("Lua error in paramChanged: " + String(lua_tostring(L, -1)));
+                const char* err = lua_tostring(L, -1);
+                juce::Logger::writeToLog("Lua error in paramChanged: " + String(err ? err : "Unknown error"));
                 lua_pop(L, 1);
             }
         }
@@ -96,13 +106,12 @@ void LuaPluginProcessor::parameterValueChanged(int parameterIndex, float newValu
         case 1: paramID = "channel"; break;
         default: return;
     }
-
     parameterChanged(paramID, newValue);
 }
 
 void LuaPluginProcessor::parameterGestureChanged(int parameterIndex, bool gestureIsStarting)
 {
-    juce::Logger::writeToLog("parameterGestureChanged called: " + String(parameterIndex) + ", starting: " + String(gestureIsStarting?"TRUE":"FALSE"));
+    juce::Logger::writeToLog("parameterGestureChanged called: " + String(parameterIndex) + ", starting: " + String(gestureIsStarting ? "TRUE" : "FALSE"));
 }
 
 void LuaPluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
@@ -117,11 +126,12 @@ void LuaPluginProcessor::releaseResources()
 
 void LuaPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-// !J! For testing only:
+    // !J! For testing only:
 #if 0
     static bool firstBlock = true;
     if (firstBlock)
     {
+        juce::ScopedLock lock(luaLock); // Protect test Lua call
         lua_getglobal(L, "setParam");
         lua_pushstring(L, "volume");
         lua_pushnumber(L, 60); // Lua sets volume to 60
@@ -134,38 +144,45 @@ void LuaPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     }
 #endif
 
-    lua_getglobal(L, "processBlockEnter");
-    if (lua_isfunction(L, -1))
     {
-        lua_pushinteger(L, buffer.getNumSamples());
-        if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+        juce::ScopedLock lock(luaLock); // Protect Lua processBlockEnter
+        lua_getglobal(L, "processBlockEnter");
+        if (lua_isfunction(L, -1))
         {
-            juce::Logger::writeToLog("Lua error in processBlockEnter: " + String(lua_tostring(L, -1)));
+            lua_pushinteger(L, buffer.getNumSamples());
+            if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+            {
+                const char* err = lua_tostring(L, -1);
+                juce::Logger::writeToLog("Lua error in processBlockEnter: " + String(err ? err : "Unknown error"));
+                lua_pop(L, 1);
+            }
+        }
+        else
+        {
+            juce::Logger::writeToLog("processBlockEnter not found");
             lua_pop(L, 1);
         }
-    }
-    else
-    {
-        juce::Logger::writeToLog("processBlockEnter not found");
-        lua_pop(L, 1);
     }
 
     float vol = apvts.getRawParameterValue("volume")->load() / 127.0f;
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         buffer.applyGain(ch, 0, buffer.getNumSamples(), vol);
 
-    lua_getglobal(L, "processBlockExit");
-    if (lua_isfunction(L, -1))
     {
-        lua_pushinteger(L, buffer.getNumSamples());
-        if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+        juce::ScopedLock lock(luaLock); // Protect Lua processBlockExit
+        lua_getglobal(L, "processBlockExit");
+        if (lua_isfunction(L, -1))
         {
-            juce::Logger::writeToLog("Lua error in processBlockExit: " + String(lua_tostring(L, -1)));
-            lua_pop(L, 1);
+            lua_pushinteger(L, buffer.getNumSamples());
+            if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+            {
+                const char* err = lua_tostring(L, -1);
+                juce::Logger::writeToLog("Lua error in processBlockExit: " + String(err ? err : "Unknown error"));
+                lua_pop(L, 1);
+            }
         }
     }
 }
-
 
 int LuaPluginProcessor::luaGetParam(lua_State* L)
 {
@@ -176,12 +193,18 @@ int LuaPluginProcessor::luaGetParam(lua_State* L)
         juce::Logger::writeToLog("Error: LuaPluginProcessor instance not found in registry.");
         return 0;
     }
-
     lua_pop(L, 1);
 
     const char* paramId = luaL_checkstring(L, 1);
-    float value = processor->apvts.getRawParameterValue(paramId)->load();
-    lua_pushnumber(L, value);
+    juce::ScopedLock lock(processor->luaLock); // Protect parameter access
+    if (auto* param = processor->apvts.getRawParameterValue(paramId))
+    {
+        float value = param->load();
+        lua_pushnumber(L, value);
+        return 1;
+    }
+    juce::Logger::writeToLog("Error: Invalid parameter ID in luaGetParam: " + String(paramId));
+    lua_pushnumber(L, 0.0f); // Default value
     return 1;
 }
 
@@ -194,18 +217,19 @@ int LuaPluginProcessor::luaSetParam(lua_State* L)
         juce::Logger::writeToLog("Error: LuaPluginProcessor instance not found in registry.");
         return 0;
     }
-
     lua_pop(L, 1);
 
     const char* paramId = luaL_checkstring(L, 1);
     float value = luaL_checknumber(L, 2);
 
-    if (auto* param = processor->apvts.getParameter(paramId))
     {
-        param->setValueNotifyingHost(value / 127.0f);
-        juce::Logger::writeToLog("luaSetParam set " + String(paramId) + " to " + String(value));
+        juce::ScopedLock lock(processor->luaLock); // Protect parameter setting
+        if (auto* param = processor->apvts.getParameter(paramId))
+        {
+            param->setValueNotifyingHost(value / 127.0f);
+            juce::Logger::writeToLog("luaSetParam set " + String(paramId) + " to " + String(value));
+        }
     }
-
     return 0;
 }
 
