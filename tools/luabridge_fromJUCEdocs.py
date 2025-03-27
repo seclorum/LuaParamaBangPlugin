@@ -1,3 +1,5 @@
+# Note: edit JUCE Doxyfile to GENERATE_XML = YES
+
 import xml.etree.ElementTree as ET
 
 # Path to the Doxygen XML output
