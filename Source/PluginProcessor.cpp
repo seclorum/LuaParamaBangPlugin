@@ -1,3 +1,6 @@
+/*
+ * Simple PluginProcessor with two parameters - volume and channel - which are exposed to the Lua VM
+ */
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 

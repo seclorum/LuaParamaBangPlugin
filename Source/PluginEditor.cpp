@@ -1,3 +1,6 @@
+/*
+ * PluginEditor - implement a very simple PluginEditor which can be used by the Lua VM
+ */
 #include "PluginEditor.h"
 
 LuaPluginEditor::LuaPluginEditor(LuaPluginProcessor& p, juce::AudioProcessorValueTreeState& vts)

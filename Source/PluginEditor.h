@@ -1,3 +1,6 @@
+/*
+ * PluginEditor - implement a very simple PluginEditor which can be used by the Lua VM
+ */
 #pragma once
 #include "PluginProcessor.h"
 

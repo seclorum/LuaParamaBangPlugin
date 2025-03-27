@@ -1,3 +1,6 @@
+/*
+ * Simple PluginProcessor with two parameters - volume and channel - which are exposed to the Lua VM
+ */
 #pragma once
 
 #include <juce_audio_plugin_client/juce_audio_plugin_client.h>
