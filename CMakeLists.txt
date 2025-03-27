@@ -125,7 +125,7 @@ add_dependencies(LuaParamaBangPluginCore lua)
 
 # Add plugin, linking to the combined core library
 juce_add_plugin(LuaParamaBangPlugin
-        COMPANY_NAME "warblaydrInc"
+        COMPANY_NAME "github.com/seclorum"
         IS_SYNTH FALSE
         NEEDS_MIDI_INPUT TRUE
         NEEDS_MIDI_OUTPUT FALSE
