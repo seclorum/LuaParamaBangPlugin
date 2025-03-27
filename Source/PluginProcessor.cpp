@@ -8,6 +8,12 @@ using namespace juce;
 
 static const int PARAMETER_V1 = 1;
 
+#include "PluginProcessor.h"
+#include "PluginEditor.h"
+#include "LuaBridge/LuaBridge.h"
+
+using namespace juce;
+
 LuaPluginProcessor::LuaPluginProcessor()
         : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo())
                                  .withOutput("Output", juce::AudioChannelSet::stereo())),
@@ -25,6 +31,7 @@ LuaPluginProcessor::LuaPluginProcessor()
     }
     luaL_openlibs(L);
 
+    // LuaBridge bindings
     {
         juce::ScopedLock lock(luaLock); // Protect Lua initialization
         lua_pushlightuserdata(L, this);
@@ -35,6 +42,22 @@ LuaPluginProcessor::LuaPluginProcessor()
         lua_pushcfunction(L, luaSetParam);
         lua_setglobal(L, "setParam");
 
+        // Expose JUCE classes to Lua using LuaBridge
+        LuaBridge::getGlobalNamespace(L)
+                .beginClass<LuaPluginProcessor>("LuaPluginProcessor")
+                .addConstructor<void (*)()>()
+                .addFunction("getVolume", &LuaPluginProcessor::getVolume)
+                .addFunction("setVolume", &LuaPluginProcessor::setVolume)
+                .endClass();
+
+        LuaBridge::getGlobalNamespace(L)
+                .beginClass<juce::AudioParameterInt>("AudioParameterInt")
+                .addConstructor<void (*)(const juce::String&, const juce::String&, int, int, int)>()
+                .addFunction("getValue", &juce::AudioParameterInt::getValue)
+                .addFunction("setValue", &juce::AudioParameterInt::setValue)
+                .endClass();
+
+        // Load Lua script
         if (luaL_dostring(L, R"(
             function paramChanged(id, value)
                 print("Parameter changed: " .. id .. " = " .. value)
@@ -43,10 +66,6 @@ LuaPluginProcessor::LuaPluginProcessor()
             function processBlockEnter(numSamples)
                 local vol = getParam("volume") / 127
                 print("Processing block with volume: " .. vol)
-            end
-
-            function processBlockExit(numSamples)
-                -- Cleanup if needed
             end
         )") != LUA_OK)
         {
@@ -64,12 +83,28 @@ LuaPluginProcessor::LuaPluginProcessor()
     juce::Logger::writeToLog("Parameter listeners added for volume and channel");
 }
 
+
 LuaPluginProcessor::~LuaPluginProcessor()
 {
     apvts.removeParameterListener("volume", this);
     apvts.removeParameterListener("channel", this);
     if (L) lua_close(L);
 }
+
+
+// for LuaBridge:
+// Getter for the volume parameter
+float LuaPluginProcessor::getVolume()
+{
+    return apvts.getRawParameterValue("volume")->load();
+}
+
+// Setter for the volume parameter
+void LuaPluginProcessor::setVolume(float value)
+{
+    apvts.getParameter("volume")->setValueNotifyingHost(value);
+}
+
 
 void LuaPluginProcessor::parameterChanged(const String& parameterID, float newValue)
 {

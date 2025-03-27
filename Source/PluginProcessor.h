@@ -36,6 +36,10 @@ public:
 
     lua_State* getLuaState() { return L; } // Access Lua state from editor
 
+    // for LuaBridge
+    float getVolume();
+    float setVolume();
+
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;

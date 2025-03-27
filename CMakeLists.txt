@@ -113,7 +113,8 @@ target_include_directories(LuaParamaBangPluginCore
         Source
         ${lua_SOURCE_DIR}
         ${juce_SOURCE_DIR}/modules
-        ${luabridge_SOURCE_DIR}/include  # Include LuaBridge headers
+        ${luabridge_SOURCE_DIR}/Source/  # Include LuaBridge headers
+
 )
 target_link_libraries(LuaParamaBangPluginCore
         PRIVATE
