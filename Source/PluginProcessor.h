@@ -21,7 +21,9 @@ extern "C" {
 #include <lualib.h>
 }
 
-class LuaPluginProcessor : public juce::AudioProcessor
+using namespace juce;
+
+class LuaPluginProcessor : public juce::AudioProcessor, public juce::AudioProcessorParameter::Listener, public juce::AudioProcessorValueTreeState::Listener
 {
 public:
     LuaPluginProcessor();
@@ -30,6 +32,12 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    void parameterChanged(const String& parameterID, float newValue) override;
+
+    // ✅ Corrected: Implement the required pure virtual methods
+    void parameterValueChanged(int parameterIndex, float newValue) override;
+    void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }

@@ -1,7 +1,7 @@
 #include "PluginEditor.h"
 
 LuaPluginEditor::LuaPluginEditor(LuaPluginProcessor& p, juce::AudioProcessorValueTreeState& vts)
-    : AudioProcessorEditor(&p), luaProcessor(p), apvts(vts)
+        : AudioProcessorEditor(&p), luaProcessor(p), apvts(vts)
 {
     volumeLabel.setText("Volume", juce::dontSendNotification);
     addAndMakeVisible(volumeLabel);
@@ -9,8 +9,7 @@ LuaPluginEditor::LuaPluginEditor(LuaPluginProcessor& p, juce::AudioProcessorValu
     volumeSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     volumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
     addAndMakeVisible(volumeSlider);
-    apvts.addParameterListener("volume", this);
-    volumeSlider.setValue(apvts.getRawParameterValue("volume")->load());
+    volumeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "volume", volumeSlider);
 
     channelLabel.setText("Channel", juce::dontSendNotification);
     addAndMakeVisible(channelLabel);
@@ -18,8 +17,10 @@ LuaPluginEditor::LuaPluginEditor(LuaPluginProcessor& p, juce::AudioProcessorValu
     channelSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     channelSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
     addAndMakeVisible(channelSlider);
+    channelAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "channel", channelSlider);
+
+    apvts.addParameterListener("volume", this);
     apvts.addParameterListener("channel", this);
-    channelSlider.setValue(apvts.getRawParameterValue("channel")->load());
 
     setSize(400, 200);
 }
@@ -47,13 +48,6 @@ void LuaPluginEditor::resized()
 
 void LuaPluginEditor::parameterChanged(const juce::String& parameterID, float newValue)
 {
-    lua_getglobal(luaProcessor.getLuaState(), "paramChanged");
-    lua_pushstring(luaProcessor.getLuaState(), parameterID.toRawUTF8());
-    lua_pushnumber(luaProcessor.getLuaState(), newValue);
-    lua_call(luaProcessor.getLuaState(), 2, 0);
-
-    if (parameterID == "volume")
-        volumeSlider.setValue(newValue, juce::dontSendNotification);
-    else if (parameterID == "channel")
-        channelSlider.setValue(newValue, juce::dontSendNotification);
+    juce::Logger::writeToLog("Editor: parameterChanged called with ID: " + parameterID + ", value: " + String(newValue));
+    // Removed Lua call here; let the processor handle it
 }
