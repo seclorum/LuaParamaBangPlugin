@@ -1,12 +1,17 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+
+using namespace juce;
+
+static const int PARAMETER_V1 = 1;
+
 LuaPluginProcessor::LuaPluginProcessor()
     : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo())
                                      .withOutput("Output", juce::AudioChannelSet::stereo())),
       apvts(*this, nullptr, "PARAMETERS", {
-          std::make_unique<juce::AudioParameterInt>("volume", "Volume", 0, 127, 100),
-          std::make_unique<juce::AudioParameterInt>("channel", "Channel", 0, 127, 0)
+          std::make_unique<juce::AudioParameterInt>(ParameterID {"volume", PARAMETER_V1}, "Volume", 0, 127, 100),
+          std::make_unique<juce::AudioParameterInt>(ParameterID {"channel", PARAMETER_V1}, "Channel", 0, 127, 0)
       })
 {
     L = luaL_newstate();
