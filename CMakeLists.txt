@@ -21,6 +21,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(lua)
 
+# Fetch LuaBridge
+FetchContent_Declare(
+        luabridge
+        GIT_REPOSITORY https://github.com/vinniefalco/LuaBridge.git
+        GIT_TAG master
+)
+FetchContent_MakeAvailable(luabridge)
+
 # Verify lua_SOURCE_DIR is populated
 if(NOT lua_SOURCE_DIR)
     message(FATAL_ERROR "lua_SOURCE_DIR is not set. FetchContent failed to retrieve Lua.")
@@ -105,6 +113,7 @@ target_include_directories(LuaParamaBangPluginCore
         Source
         ${lua_SOURCE_DIR}
         ${juce_SOURCE_DIR}/modules
+        ${luabridge_SOURCE_DIR}/include  # Include LuaBridge headers
 )
 target_link_libraries(LuaParamaBangPluginCore
         PRIVATE
@@ -144,6 +153,7 @@ target_include_directories(LuaParamaBangPlugin
         Source
         ${lua_SOURCE_DIR}
         ${juce_SOURCE_DIR}/modules
+        ${luabridge_SOURCE_DIR}/include  # Include LuaBridge headers
 )
 
 # Link the plugin to the core library and JUCE recommended flags
@@ -165,3 +175,5 @@ target_compile_definitions(LuaParamaBangPlugin
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
 )
+
+
