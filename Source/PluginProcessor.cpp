@@ -117,16 +117,18 @@ void LuaPluginProcessor::releaseResources()
 
 void LuaPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-// !J! for testing only
+// !J! For testing only:
 #if 0
-    // Added: Test parameter change on first block
     static bool firstBlock = true;
     if (firstBlock)
     {
-        if (auto* param = apvts.getParameter("volume"))
+        lua_getglobal(L, "setParam");
+        lua_pushstring(L, "volume");
+        lua_pushnumber(L, 60); // Lua sets volume to 60
+        if (lua_pcall(L, 2, 0, 0) != LUA_OK)
         {
-            param->setValueNotifyingHost(50.0f / 127.0f); // Set volume to 50
-            juce::Logger::writeToLog("Test: Set volume to 50");
+            juce::Logger::writeToLog("Lua error in setParam test: " + String(lua_tostring(L, -1)));
+            lua_pop(L, 1);
         }
         firstBlock = false;
     }
@@ -163,6 +165,7 @@ void LuaPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         }
     }
 }
+
 
 int LuaPluginProcessor::luaGetParam(lua_State* L)
 {

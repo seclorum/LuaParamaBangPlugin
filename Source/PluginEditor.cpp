@@ -49,5 +49,4 @@ void LuaPluginEditor::resized()
 void LuaPluginEditor::parameterChanged(const juce::String& parameterID, float newValue)
 {
     juce::Logger::writeToLog("Editor: parameterChanged called with ID: " + parameterID + ", value: " + String(newValue));
-    // Removed Lua call here; let the processor handle it
 }

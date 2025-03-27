@@ -29,6 +29,8 @@ public:
     LuaPluginProcessor();
     ~LuaPluginProcessor() override;
 
+    lua_State* getLuaState() { return L; } // Access Lua state from editor
+
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
