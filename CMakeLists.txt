@@ -74,6 +74,7 @@ set(LUA_SRC
 add_library(lua STATIC ${LUA_SRC})
 target_include_directories(lua PUBLIC ${lua_SOURCE_DIR})
 target_compile_definitions(lua PRIVATE LUA_USE_C89)
+set_target_properties(lua PROPERTIES LINKER_LANGUAGE C)
 
 # macOS specific settings for Lua
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
