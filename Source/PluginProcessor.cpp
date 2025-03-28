@@ -14,8 +14,7 @@ LuaPluginProcessor::LuaPluginProcessor()
           apvts(*this, nullptr, "PARAMETERS", {
                   std::make_unique<juce::AudioParameterInt>(ParameterID {"volume", PARAMETER_V1}, "Volume", 0, 127, 100),
                   std::make_unique<juce::AudioParameterInt>(ParameterID {"channel", PARAMETER_V1}, "Channel", 0, 127, 0)
-          }),
-          L(nullptr) // Initialize L to nullptr
+          })
 {
     L = luaL_newstate();
     if (!L)
@@ -138,55 +137,6 @@ void LuaPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         buffer.applyGain(ch, 0, buffer.getNumSamples(), vol);
 
     callLuaFunction("processBlockExit", 1, buffer.getNumSamples());
-}
-
-int LuaPluginProcessor::luaGetParam(lua_State* L)
-{
-    lua_getfield(L, LUA_REGISTRYINDEX, "LuaPluginProcessor");
-    auto* processor = static_cast<LuaPluginProcessor*>(lua_touserdata(L, -1));
-    if (!processor)
-    {
-        juce::Logger::writeToLog("Error: LuaPluginProcessor instance not found in registry.");
-        return 0;
-    }
-    lua_pop(L, 1);
-
-    const char* paramId = luaL_checkstring(L, 1);
-    juce::ScopedLock lock(processor->luaLock); // Protect parameter access
-    if (auto* param = processor->apvts.getRawParameterValue(paramId))
-    {
-        float value = param->load();
-        lua_pushnumber(L, value);
-        return 1;
-    }
-    juce::Logger::writeToLog("Error: Invalid parameter ID in luaGetParam: " + String(paramId));
-    lua_pushnumber(L, 0.0f); // Default value
-    return 1;
-}
-
-int LuaPluginProcessor::luaSetParam(lua_State* L)
-{
-    lua_getfield(L, LUA_REGISTRYINDEX, "LuaPluginProcessor");
-    auto* processor = static_cast<LuaPluginProcessor*>(lua_touserdata(L, -1));
-    if (!processor)
-    {
-        juce::Logger::writeToLog("Error: LuaPluginProcessor instance not found in registry.");
-        return 0;
-    }
-    lua_pop(L, 1);
-
-    const char* paramId = luaL_checkstring(L, 1);
-    float value = luaL_checknumber(L, 2);
-
-    {
-        juce::ScopedLock lock(processor->luaLock); // Protect parameter setting
-        if (auto* param = processor->apvts.getParameter(paramId))
-        {
-            param->setValueNotifyingHost(value);
-            juce::Logger::writeToLog("luaSetParam set " + String(paramId) + " to " + String(value));
-        }
-    }
-    return 0;
 }
 
 void LuaPluginProcessor::getStateInformation(juce::MemoryBlock& destData)
