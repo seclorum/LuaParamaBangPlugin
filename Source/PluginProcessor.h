@@ -1,75 +1,61 @@
 /*
- * Simple PluginProcessor with two parameters - volume and channel - which are exposed to the Lua VM
+ * PluginProcessor.h - Header for LuaPluginProcessor
  */
-#pragma once
+#ifndef PLUGINPROCESSOR_H
+#define PLUGINPROCESSOR_H
 
-#include <juce_audio_plugin_client/juce_audio_plugin_client.h>
 #include <juce_audio_processors/juce_audio_processors.h>
-#include <juce_gui_extra/juce_gui_extra.h>
-#include <juce_gui_basics/juce_gui_basics.h>
-#include <juce_graphics/juce_graphics.h>
-#include <juce_events/juce_events.h>
-#include <juce_core/juce_core.h>
-#include <juce_data_structures/juce_data_structures.h>
-#include <juce_audio_basics/juce_audio_basics.h>
-#include <juce_audio_devices/juce_audio_devices.h>
-#include <juce_audio_formats/juce_audio_formats.h>
-#include <juce_audio_utils/juce_audio_utils.h>
-#include <juce_dsp/juce_dsp.h>
-#include <juce_opengl/juce_opengl.h>
-
-extern "C" {
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
-}
-
-using namespace juce;
+#include "LuaInterface.h"
 
 class LuaPluginProcessor : public juce::AudioProcessor,
-                           public juce::AudioProcessorParameter::Listener,
-                           public juce::AudioProcessorValueTreeState::Listener
-{
+                           public LuaInterface,
+                           public juce::AudioProcessorValueTreeState::Listener,
+                           public juce::AudioProcessorParameter::Listener {
 public:
     LuaPluginProcessor();
     ~LuaPluginProcessor() override;
 
-    lua_State* getLuaState() { return L; } // Access Lua state from editor
-
-    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
-    void releaseResources() override;
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
-
-    void parameterChanged(const String& parameterID, float newValue) override;
+    // Listener interface methods
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
 
+    // Additional method for Lua integration
+    void parameterChanged(const juce::String& parameterID, float newValue);
+
+
+    // AudioProcessor required methods
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) override;
+    const juce::String getName() const override;
+    bool acceptsMidi() const override;
+    bool producesMidi() const override;
+    double getTailLengthSeconds() const override;
+    int getNumPrograms() const { return 1; }
+    int getCurrentProgram() const { return 1; }
+    void setCurrentProgram(int index) { }
+    const juce::String getProgramName(int index) const {return ""; }
+
+    int getNumPrograms() { return 1; }
+
+    int getCurrentProgram() { return 1; }
+
+    void changeProgramName(int index, const juce::String& newName) override;
+    bool hasEditor() const override;
+
+    const juce::String getProgramName (int index) { return ""; }
+
+    // State management
+    void getStateInformation(juce::MemoryBlock& destData) override;
+    void setStateInformation(const void* data, int sizeInBytes) override;
+
     juce::AudioProcessorEditor* createEditor() override;
-    bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "LuaPlugin"; }
-
-    bool acceptsMidi() const override { return true; }
-    bool producesMidi() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
-
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram(int) override {}
-    const juce::String getProgramName(int) override { return {}; }
-    void changeProgramName(int, const juce::String&) override {}
-
-    void getStateInformation(juce::MemoryBlock&) override;
-    void setStateInformation(const void*, int) override;
-
-    lua_State* getLuaState() const { return L; }
+    juce::String getLuaScript() const;
 
 private:
     juce::AudioProcessorValueTreeState apvts;
-    lua_State* L;
-    juce::CriticalSection luaLock; // Added for thread safety
+    static const juce::String defaultLuaScript;
 
-    static int luaGetParam(lua_State* L);
-    static int luaSetParam(lua_State* L);
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LuaPluginProcessor)
 };
+
+#endif // PLUGINPROCESSOR_H

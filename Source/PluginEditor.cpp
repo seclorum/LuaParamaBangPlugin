@@ -3,6 +3,8 @@
  */
 #include "PluginEditor.h"
 
+using namespace juce;
+
 LuaPluginEditor::LuaPluginEditor(LuaPluginProcessor& p, juce::AudioProcessorValueTreeState& vts)
         : AudioProcessorEditor(&p), luaProcessor(p), apvts(vts)
 {

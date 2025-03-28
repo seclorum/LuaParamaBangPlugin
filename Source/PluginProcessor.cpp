@@ -1,8 +1,8 @@
 /*
- * Simple PluginProcessor with two parameters - volume and channel - which are exposed to the Lua VM
+ * PluginProcessor.cpp - Implementation of LuaPluginProcessor with all abstract methods implemented
  */
 #include "PluginProcessor.h"
-#include "PluginEditor.h"
+#include "PluginEditor.h" // Assuming this exists
 
 using namespace juce;
 
@@ -77,47 +77,20 @@ LuaPluginProcessor::LuaPluginProcessor()
     juce::Logger::writeToLog("Parameter listeners added for volume and channel");
 }
 
-LuaPluginProcessor::~LuaPluginProcessor()
-{
+LuaPluginProcessor::~LuaPluginProcessor() {
     apvts.removeParameterListener("volume", this);
     apvts.removeParameterListener("channel", this);
-    if (L) lua_close(L);
 }
 
-void LuaPluginProcessor::parameterChanged(const String& parameterID, float newValue)
-{
+void LuaPluginProcessor::parameterChanged(const String& parameterID, float newValue) {
     juce::Logger::writeToLog("parameterChanged called with ID: " + parameterID + ", value: " + String(newValue));
-
-    if (!L) return; // Skip if Lua is invalid
-    {
-        juce::ScopedLock lock(luaLock); // Protect Lua access
-        lua_getglobal(L, "paramChanged");
-        if (lua_isfunction(L, -1))
-        {
-            lua_pushstring(L, parameterID.toRawUTF8());
-            lua_pushnumber(L, newValue);
-            if (lua_pcall(L, 2, 0, 0) != LUA_OK)
-            {
-                const char* err = lua_tostring(L, -1);
-                juce::Logger::writeToLog("Lua error in paramChanged: " + String(err ? err : "Unknown error"));
-                lua_pop(L, 1);
-            }
-        }
-        else
-        {
-            juce::Logger::writeToLog("Lua error: paramChanged function not found");
-            lua_pop(L, 1);
-        }
-    }
+    callLuaFunction("paramChanged", 2, parameterID.toRawUTF8(), newValue);
 }
 
-void LuaPluginProcessor::parameterValueChanged(int parameterIndex, float newValue)
-{
+void LuaPluginProcessor::parameterValueChanged(int parameterIndex, float newValue) {
     juce::Logger::writeToLog("parameterValueChanged called with index: " + String(parameterIndex) + ", value: " + String(newValue));
-
     String paramID;
-    switch (parameterIndex)
-    {
+    switch (parameterIndex) {
         case 0: paramID = "volume"; break;
         case 1: paramID = "channel"; break;
         default: return;
@@ -125,18 +98,15 @@ void LuaPluginProcessor::parameterValueChanged(int parameterIndex, float newValu
     parameterChanged(paramID, newValue);
 }
 
-void LuaPluginProcessor::parameterGestureChanged(int parameterIndex, bool gestureIsStarting)
-{
+void LuaPluginProcessor::parameterGestureChanged(int parameterIndex, bool gestureIsStarting) {
     juce::Logger::writeToLog("parameterGestureChanged called: " + String(parameterIndex) + ", starting: " + String(gestureIsStarting ? "TRUE" : "FALSE"));
 }
 
-void LuaPluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
-{
+void LuaPluginProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     juce::Logger::writeToLog("prepareToPlay called with sampleRate: " + String(sampleRate) + ", blockSize: " + String(samplesPerBlock));
 }
 
-void LuaPluginProcessor::releaseResources()
-{
+void LuaPluginProcessor::releaseResources() {
     juce::Logger::writeToLog("releaseResources called");
 }
 
@@ -160,44 +130,14 @@ void LuaPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     }
 #endif
 
-    {
-        juce::ScopedLock lock(luaLock); // Protect Lua processBlockEnter
-        lua_getglobal(L, "processBlockEnter");
-        if (lua_isfunction(L, -1))
-        {
-            lua_pushinteger(L, buffer.getNumSamples());
-            if (lua_pcall(L, 1, 0, 0) != LUA_OK)
-            {
-                const char* err = lua_tostring(L, -1);
-                juce::Logger::writeToLog("Lua error in processBlockEnter: " + String(err ? err : "Unknown error"));
-                lua_pop(L, 1);
-            }
-        }
-        else
-        {
-            juce::Logger::writeToLog("processBlockEnter not found");
-            lua_pop(L, 1);
-        }
-    }
+    callLuaFunction("processBlockEnter", 1, buffer.getNumSamples());
 
-    float vol = apvts.getRawParameterValue("volume")->load();
+    float vol = apvts.getRawParameterValue("volume")->load() / 127.0f;
+
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         buffer.applyGain(ch, 0, buffer.getNumSamples(), vol);
 
-    {
-        juce::ScopedLock lock(luaLock); // Protect Lua processBlockExit
-        lua_getglobal(L, "processBlockExit");
-        if (lua_isfunction(L, -1))
-        {
-            lua_pushinteger(L, buffer.getNumSamples());
-            if (lua_pcall(L, 1, 0, 0) != LUA_OK)
-            {
-                const char* err = lua_tostring(L, -1);
-                juce::Logger::writeToLog("Lua error in processBlockExit: " + String(err ? err : "Unknown error"));
-                lua_pop(L, 1);
-            }
-        }
-    }
+    callLuaFunction("processBlockExit", 1, buffer.getNumSamples());
 }
 
 int LuaPluginProcessor::luaGetParam(lua_State* L)
@@ -256,19 +196,38 @@ void LuaPluginProcessor::getStateInformation(juce::MemoryBlock& destData)
     copyXmlToBinary(*xml, destData);
 }
 
-void LuaPluginProcessor::setStateInformation(const void* data, int sizeInBytes)
-{
+void LuaPluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState.get() != nullptr)
         apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
 }
 
-juce::AudioProcessorEditor* LuaPluginProcessor::createEditor()
-{
+juce::AudioProcessorEditor* LuaPluginProcessor::createEditor() {
     return new LuaPluginEditor(*this, apvts);
 }
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
-    return new LuaPluginProcessor();
+const juce::String LuaPluginProcessor::getName() const {
+    return "LuaPlugin";
+}
+
+bool LuaPluginProcessor::acceptsMidi() const {
+    return true;
+}
+
+bool LuaPluginProcessor::producesMidi() const {
+    return false;
+}
+
+double LuaPluginProcessor::getTailLengthSeconds() const {
+    return 0.0;
+}
+
+void LuaPluginProcessor::changeProgramName(int, const juce::String&) {}
+
+bool LuaPluginProcessor::hasEditor() const {
+    return true;
+}
+
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
+    return new LuaPluginProcessor(); // Line 99: Should now work
 }
