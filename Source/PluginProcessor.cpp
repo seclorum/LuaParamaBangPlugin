@@ -36,13 +36,26 @@ LuaPluginProcessor::LuaPluginProcessor()
         lua_setglobal(L, "setParam");
 
         if (luaL_dostring(L, R"(
+			lastVol = 0
+			lutTrans = {}
+			for i = 0, 127 do
+				lutTrans[i] = i / 127
+			end
+
             function paramChanged(id, value)
-                print("Parameter changed: " .. id .. " = " .. value)
+                print("lua:Parameter changed: " .. id .. " = " .. value)
+				if (id == "channel") then
+					print("lua:would set volume to", lutTrans[value])
+					setParam("volume", lutTrans[value])
+				end
             end
 
             function processBlockEnter(numSamples)
-                local vol = getParam("volume") / 127
-                print("Processing block with volume: " .. vol)
+                local vol = getParam("volume")
+				if (vol ~= lastVol) then
+                	print("lua:Processing block with volume: " .. vol)
+					lastVol = vol
+				end
             end
 
             function processBlockExit(numSamples)
@@ -167,7 +180,7 @@ void LuaPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         }
     }
 
-    float vol = apvts.getRawParameterValue("volume")->load() / 127.0f;
+    float vol = apvts.getRawParameterValue("volume")->load();
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         buffer.applyGain(ch, 0, buffer.getNumSamples(), vol);
 
@@ -229,7 +242,7 @@ int LuaPluginProcessor::luaSetParam(lua_State* L)
         juce::ScopedLock lock(processor->luaLock); // Protect parameter setting
         if (auto* param = processor->apvts.getParameter(paramId))
         {
-            param->setValueNotifyingHost(value / 127.0f);
+            param->setValueNotifyingHost(value);
             juce::Logger::writeToLog("luaSetParam set " + String(paramId) + " to " + String(value));
         }
     }
